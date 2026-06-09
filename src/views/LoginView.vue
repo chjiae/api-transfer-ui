@@ -121,7 +121,7 @@ const submitAuth = async () => {
       storeToken(result.token, remember.value)
       const redirect = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/')
         ? route.query.redirect
-        : '/'
+        : '/dashboard'
       await router.replace(redirect)
     }
   } catch (error) {

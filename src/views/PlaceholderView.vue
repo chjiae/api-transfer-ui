@@ -1,21 +1,18 @@
 <script setup lang="ts">
-import { Construction } from 'lucide-vue-next'
+import { Wrench } from 'lucide-vue-next'
 import { useRoute } from 'vue-router'
 const route = useRoute()
 const titles: Record<string, string> = {
-  models: '模型管理',
   routing: '路由策略',
   'load-balance': '负载均衡',
-  cost: '成本分析',
   billing: '账单中心',
-  audit: '审计日志',
 }
 const title = titles[String(route.name)] ?? '页面开发中'
 </script>
 
 <template>
   <div class="placeholder">
-    <Construction :size="48" class="icon" />
+    <Wrench :size="48" class="icon" />
     <h2>{{ title }}</h2>
     <p>此功能正在开发中，敬请期待。</p>
   </div>

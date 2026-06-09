@@ -12,6 +12,7 @@ import {
   Layers,
   LayoutDashboard,
   Menu,
+  MessageCircle,
   Network,
   PanelLeftClose,
   PanelLeftOpen,
@@ -35,6 +36,7 @@ const menuGroups = [
   {
     label: '',
     items: [
+      { path: '/dashboard/chat', icon: MessageCircle, label: 'AI 对话' },
       { path: '/dashboard', icon: LayoutDashboard, label: '概览' },
       { path: '/dashboard/analytics', icon: BarChart3, label: '数据看板' },
     ],

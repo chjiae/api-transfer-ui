@@ -26,11 +26,11 @@ export interface ChannelHealthEntry {
 export interface DashboardOverview {
   totalRequests: number
   successRate: number
-  /** 首字延迟 P50 ms（响应延迟，反映服务速度，不含生成时长） */
+  /** 首字延迟 P50 ms（从发起到首字到达；含模型思考时间，仅流式调用计入） */
   ttftP50: number
   /** 首字延迟 P95 ms */
   ttftP95: number
-  /** 平均生成耗时 ms（整次调用墙钟均值，含模型生成时间） */
+  /** 整次调用墙钟均值 ms（含模型生成时长；流式/非流式/失败全量计入，与 TTFT 对比可看吞吐） */
   genAvgLatency: number
   totalCost: number
   /** 环比（vs 上一等长周期，百分比；null=无上期基准） */

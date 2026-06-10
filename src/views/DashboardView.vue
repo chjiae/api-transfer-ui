@@ -85,9 +85,11 @@ const stats = computed(() => {
       sparkData: d.requestTrend.map((p) => p.successRate),
     },
     {
-      label: '响应延迟 P50',
+      label: '首字延迟 P50',
       value: d.ttftP50.toLocaleString() + ' ms',
-      hint: d.genAvgLatency > 0 ? `生成耗时均值 ${d.genAvgLatency.toLocaleString()} ms` : '首字到达时间',
+      hint: d.genAvgLatency > 0
+        ? `等首个字 · 整次耗时 ${d.genAvgLatency.toLocaleString()} ms（含生成）`
+        : '从发起到首字到达 · 含模型思考',
       tone: ttftTone as 'success' | 'warning',
       changePct: d.ttftChangePct,
       changeGood: 'down' as const,

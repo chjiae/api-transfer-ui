@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref } from 'vue'
-import { Bot, Loader2, Send, User } from 'lucide-vue-next'
+import { Bot, Loader2, MessageSquarePlus, Send, User } from 'lucide-vue-next'
 import axios from 'axios'
 import { getToken } from '@/network/http'
 
@@ -67,6 +67,12 @@ const scrollBottom = () => {
   const el = document.getElementById('chat-scroll')
   if (el) el.scrollTop = el.scrollHeight
 }
+
+const newChat = () => {
+  messages.value = []
+  error.value = ''
+  input.value = ''
+}
 </script>
 
 <template>
@@ -74,10 +80,15 @@ const scrollBottom = () => {
     <div class="chat-main">
       <div class="chat-header">
         <h1><Bot :size="22" /> AI 对话</h1>
-        <select v-model="selectedModel" class="model-select">
-          <option value="auto">自动选择模型</option>
-          <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
-        </select>
+        <div class="chat-header-right">
+          <button v-if="messages.length" class="new-chat-btn" @click="newChat">
+            <MessageSquarePlus :size="16" /> 新建对话
+          </button>
+          <select v-model="selectedModel" class="model-select">
+            <option value="auto">自动选择模型</option>
+            <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
+          </select>
+        </div>
       </div>
 
       <div id="chat-scroll" class="chat-messages">
@@ -132,6 +143,9 @@ const scrollBottom = () => {
 
 .chat-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; border-bottom: 1px solid var(--line); }
 .chat-header h1 { margin: 0; font-size: 18px; font-weight: 650; display: flex; align-items: center; gap: 10px; }
+.chat-header-right { display: flex; align-items: center; gap: 10px; }
+.new-chat-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 13px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 13px; cursor: pointer; font-family: inherit; white-space: nowrap; }
+.new-chat-btn:hover { color: var(--foreground); border-color: var(--line-strong); }
 .model-select { height: 34px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface-2); color: var(--foreground); font-size: 13px; cursor: pointer; min-width: 180px; }
 .model-select option { background: var(--surface); }
 

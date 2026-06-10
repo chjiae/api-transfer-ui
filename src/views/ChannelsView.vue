@@ -19,6 +19,7 @@ import UiSelect from '@/components/ui/UiSelect.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiSpinner from '@/components/ui/UiSpinner.vue'
 import UiEmpty from '@/components/ui/UiEmpty.vue'
+import ChannelEditDialog from '@/components/ui/ChannelEditDialog.vue'
 
 const channels = ref<ChannelView[]>([])
 const loading = ref(true)
@@ -28,6 +29,8 @@ const typeFilter = ref('all')
 const statusFilter = ref('all')
 const page = ref(1)
 const pageSize = 8
+const showEdit = ref(false)
+const editingChannel = ref<ChannelView | null>(null)
 
 const load = async () => {
   loading.value = true
@@ -93,6 +96,15 @@ const doDelete = async (id: number, name: string) => {
     toast.error('删除失败', e instanceof Error ? e.message : undefined)
   }
 }
+
+function openCreate() {
+  editingChannel.value = null
+  showEdit.value = true
+}
+function openEdit(channel: ChannelView) {
+  editingChannel.value = channel
+  showEdit.value = true
+}
 </script>
 
 <template>
@@ -102,7 +114,7 @@ const doDelete = async (id: number, name: string) => {
         <UiButton variant="ghost" size="sm" :loading="loading" @click="load">
           <RefreshCw :size="15" /> 刷新
         </UiButton>
-        <UiButton variant="primary" size="sm">
+        <UiButton variant="primary" size="sm" @click="openCreate">
           <Plus :size="15" /> 新建通道
         </UiButton>
       </template>
@@ -143,7 +155,7 @@ const doDelete = async (id: number, name: string) => {
         title="还没有通道"
         description="添加第一个上游通道，开始把请求路由到模型供应商"
       >
-        <template #action><UiButton variant="primary"><Plus :size="15" /> 新建通道</UiButton></template>
+        <template #action><UiButton variant="primary" @click="openCreate"><Plus :size="15" /> 新建通道</UiButton></template>
       </UiEmpty>
 
       <template v-else>
@@ -182,7 +194,7 @@ const doDelete = async (id: number, name: string) => {
                       <UiSpinner v-if="testingId === row.id" :size="14" />
                       <TestTube v-else :size="15" />
                     </button>
-                    <button class="row-icon-btn" title="配置"><Settings :size="15" /></button>
+                    <button class="row-icon-btn" title="配置" @click="openEdit(row)"><Settings :size="15" /></button>
                     <button class="row-icon-btn danger" title="删除" @click="doDelete(row.id, row.name)">
                       <Trash :size="15" />
                     </button>
@@ -203,4 +215,6 @@ const doDelete = async (id: number, name: string) => {
       </template>
     </UiCard>
   </div>
+
+  <ChannelEditDialog :open="showEdit" :channel="editingChannel" @close="showEdit = false" @saved="load" />
 </template>

@@ -2,7 +2,7 @@
 import {
   PhChatCircle as ChatCircle,
   PhSquaresFour as SquaresFour,
-  PhChartLine as ChartLine,
+
   PhStack as Stack,
   PhShareNetwork as ShareNetwork,
   PhArrowsSplit as ArrowsSplit,
@@ -52,7 +52,6 @@ const menuGroups: NavGroup[] = [
     items: [
       { path: '/dashboard', icon: SquaresFour, label: '概览' },
       { path: '/dashboard/chat', icon: ChatCircle, label: '调试对话' },
-      { path: '/dashboard/analytics', icon: ChartLine, label: '数据看板' },
     ],
   },
   {

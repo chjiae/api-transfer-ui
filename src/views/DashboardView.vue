@@ -131,11 +131,6 @@ const stats = computed(() => {
   return cards
 })
 
-const quotaPct = computed(() => {
-  if (!data.value || !data.value.rpmLimit) return 0
-  return Math.min(100, (data.value.rpmUsed / data.value.rpmLimit) * 100)
-})
-
 const statusMeta: Record<string, { label: string; tone: 'success' | 'warning' | 'danger' }> = {
   healthy: { label: '健康', tone: 'success' },
   warning: { label: '波动', tone: 'warning' },
@@ -291,11 +286,9 @@ const filteredChannels = computed(() => {
         <UiCard pad="md">
           <div class="info-head">
             <span class="info-label">速率用量 (RPM)</span>
-            <span class="info-val mono">{{ data.rpmUsed.toLocaleString() }} / {{ data.rpmLimit.toLocaleString() }}</span>
+            <span class="info-val mono">{{ data.rpmUsed.toLocaleString() }}</span>
           </div>
-          <div class="meter">
-            <div class="meter-fill" :class="{ warn: quotaPct > 80 }" :style="{ width: quotaPct + '%' }" />
-          </div>
+          <span class="info-sub">最近 60 秒请求数</span>
         </UiCard>
         <UiCard pad="md">
           <div class="info-head">
@@ -306,7 +299,7 @@ const filteredChannels = computed(() => {
         </UiCard>
         <UiCard pad="md">
           <div class="info-head">
-            <span class="info-label">通道错误率</span>
+            <span class="info-label">整体错误率</span>
             <span class="info-val mono" :class="data.errorRate > 5 ? 'danger' : ''">{{ data.errorRate.toFixed(2) }}%</span>
           </div>
           <span class="info-sub">{{ data.errorRate > 5 ? '高于阈值，建议排查上游' : '运行平稳' }}</span>
@@ -498,22 +491,6 @@ const filteredChannels = computed(() => {
 .mono {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-}
-.meter {
-  height: 6px;
-  margin-top: var(--space-3);
-  border-radius: var(--radius-full);
-  background: var(--surface-3);
-  overflow: hidden;
-}
-.meter-fill {
-  height: 100%;
-  border-radius: var(--radius-full);
-  background: var(--accent);
-  transition: width var(--dur-slow) var(--ease);
-}
-.meter-fill.warn {
-  background: var(--warning);
 }
 .info-sub {
   display: block;

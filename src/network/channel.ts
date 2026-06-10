@@ -77,3 +77,27 @@ export async function testChannel(id: number): Promise<ChannelTestView> {
   const { data } = await api.post<{ code: number; data: ChannelTestView }>(`/channels/${id}/test`)
   return data.data
 }
+
+export interface ChannelProviderPreset {
+  key: string
+  label: string
+  type: string
+  protocolEndpoints: Record<string, string>
+}
+
+export async function fetchProviderPresets(): Promise<ChannelProviderPreset[]> {
+  const { data } = await api.get<{ code: number; data: ChannelProviderPreset[] }>('/channels/provider-presets')
+  return data.data
+}
+
+export interface FetchModelsRequest {
+  type?: string
+  baseUrl?: string
+  apiKey?: string
+  channelId?: number
+}
+
+export async function fetchModels(req: FetchModelsRequest): Promise<string[]> {
+  const { data } = await api.post<{ code: number; data: string[] }>('/channels/fetch-models', req)
+  return data.data
+}

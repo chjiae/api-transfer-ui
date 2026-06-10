@@ -45,7 +45,6 @@ export interface DashboardOverview {
   modelDistribution: ModelSlice[]
   channelHealth: ChannelHealthEntry[]
   rpmUsed: number
-  rpmLimit: number
   accountQuota: number
   errorRate: number
   /** 平台营收 USD（=Σ 售价；仅 ADMIN+ 有值，USER 为 null） */

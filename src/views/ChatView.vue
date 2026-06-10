@@ -123,8 +123,11 @@ const sendMessage = async () => {
   await nextTick()
   scrollBottom()
   try {
+    const effectiveModel = selectedModel.value === 'auto' && models.value.length > 0
+      ? models.value[0]
+      : selectedModel.value
     const { data } = await api.post('/chat/completions', {
-      model: selectedModel.value,
+      model: effectiveModel,
       messages: convo.messages.map((m) => ({ role: m.role, content: m.content })),
       stream: false,
     })

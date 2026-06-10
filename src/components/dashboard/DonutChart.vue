@@ -13,7 +13,7 @@ const CY = H / 2
 const R = 72
 const INNER = 42
 
-const COLORS = ['#1683ff', '#f5a94e', '#38d99a', '#8b5cf6', '#64748b', '#e5484d', '#ff6b6b']
+const COLORS = ['#4b45e4', '#3ba7a0', '#d99a3c', '#8b78e6', '#6b8aae', '#cf6b6b', '#9a9a93']
 
 const total = computed(() => props.slices.reduce((s, v) => s + v.percentage, 0))
 
@@ -46,7 +46,7 @@ function describeArc(index: number): string {
 }
 
 const topModel = computed(() => {
-  if (!props.slices.length) return { name: '—', pct: '0%' }
+  if (!props.slices.length) return { name: '暂无', pct: '0%' }
   return { name: props.slices[0].model, pct: props.slices[0].percentage.toFixed(0) + '%' }
 })
 </script>
@@ -78,11 +78,12 @@ const topModel = computed(() => {
 
 <style scoped>
 .donut-wrap { display: flex; align-items: center; gap: 28px; }
-.donut-svg { width: 180px; height: 180px; flex-shrink: 0; }
-.donut-center { font-size: 18px; font-weight: 700; fill: var(--foreground); }
-.donut-sub { font-size: 11px; fill: var(--muted); }
-.donut-legend { display: flex; flex-direction: column; gap: 10px; }
-.legend-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--foreground); }
-.legend-item i { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
-.legend-item small { margin-left: auto; color: var(--muted); font-size: 12px; }
+.donut-svg { width: 168px; height: 168px; flex-shrink: 0; }
+.donut-center { font-size: 19px; font-weight: 600; fill: var(--text); font-family: var(--font-mono); }
+.donut-sub { font-size: 10px; fill: var(--text-3); }
+.donut-legend { display: flex; flex-direction: column; gap: 11px; min-width: 0; flex: 1; }
+.legend-item { display: flex; align-items: center; gap: 9px; font-size: var(--text-sm); color: var(--text-2); min-width: 0; }
+.legend-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.legend-item i { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+.legend-item small { margin-left: auto; color: var(--text-3); font-family: var(--font-mono); font-variant-numeric: tabular-nums; padding-left: 8px; }
 </style>

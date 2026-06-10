@@ -1,37 +1,56 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { PhTrendUp as TrendUp, PhTrendDown as TrendDown } from '@phosphor-icons/vue'
 import MiniSparkline from './MiniSparkline.vue'
 
 export interface StatsCardProps {
   label: string
   value: string
-  change: number
-  changeLabel: string
+  hint?: string
   sparkData?: number[]
-  trend?: 'up' | 'down'
+  tone?: 'neutral' | 'success' | 'warning' | 'danger'
+  /** 环比百分比；null/undefined 不显示。 */
+  changePct?: number | null
+  /** 环比是「越大越好」还是「越小越好」（影响升降的着色）。 */
+  changeGood?: 'up' | 'down'
+  /** 环比单位后缀（如百分点用 'pp'，默认 '%'）。 */
+  changeUnit?: string
 }
 
-const props = withDefaults(defineProps<StatsCardProps>(), {
-  trend: 'up',
-  sparkData: () => Array.from({ length: 24 }, () => Math.random() * 40 + 40),
-})
+const props = withDefaults(defineProps<StatsCardProps>(), { tone: 'neutral', changeGood: 'up', changeUnit: '%' })
 
-const isPositive = computed(() => props.change > 0)
+const sparkColor: Record<string, string> = {
+  neutral: 'var(--accent)',
+  success: 'var(--success)',
+  warning: 'var(--warning)',
+  danger: 'var(--danger)',
+}
+
+const hasChange = computed(() => props.changePct != null && Number.isFinite(props.changePct))
+const isUp = computed(() => (props.changePct ?? 0) >= 0)
+// 升降是否「正面」：changeGood=up 时升为好；changeGood=down 时降为好
+const isPositive = computed(() => (props.changeGood === 'up' ? isUp.value : !isUp.value))
 </script>
 
 <template>
   <div class="stat-card">
-    <div class="stat-head">
-      <span class="stat-label">{{ label }}</span>
-      <MiniSparkline v-if="sparkData" :data="sparkData" :color="trend === 'up' ? '#38d99a' : '#e5484d'" />
+    <span class="stat-label">{{ label }}</span>
+    <div class="stat-row">
+      <span class="stat-value tnum">{{ value }}</span>
+      <MiniSparkline
+        v-if="sparkData && sparkData.length > 1"
+        :data="sparkData"
+        :color="sparkColor[tone]"
+      />
     </div>
-    <div class="stat-body">
-      <span class="stat-value">{{ value }}</span>
-      <span class="stat-change" :class="{ positive: isPositive, negative: !isPositive }">
-        {{ change >= 0 ? '+' : '' }}{{ change }}%
+    <div class="stat-foot">
+      <span v-if="hasChange" class="stat-change" :class="isPositive ? 'good' : 'bad'">
+        <TrendUp v-if="isUp" :size="13" weight="bold" />
+        <TrendDown v-else :size="13" weight="bold" />
+        {{ Math.abs(changePct as number).toFixed(1) }}{{ changeUnit }}
       </span>
+      <span v-if="hint" class="stat-hint">{{ hint }}</span>
     </div>
-    <div class="stat-foot">{{ changeLabel }}</div>
   </div>
 </template>
 
@@ -39,53 +58,57 @@ const isPositive = computed(() => props.change > 0)
 .stat-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 20px 22px;
-  border-radius: 9px;
+  gap: 10px;
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
   border: 1px solid var(--line);
   background: var(--surface);
-  transition: border-color 180ms;
+  transition: border-color var(--dur) var(--ease);
 }
-
-.stat-card:hover { border-color: var(--line-strong); }
-
-.stat-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+.stat-card:hover {
+  border-color: var(--line-2);
 }
-
 .stat-label {
-  font-size: 13px;
-  color: var(--muted);
-  font-weight: 500;
+  font-size: var(--text-sm);
+  color: var(--text-3);
+  font-weight: 480;
 }
-
-.stat-body {
+.stat-row {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
 }
-
 .stat-value {
   font-size: 28px;
-  font-weight: 720;
-  color: var(--foreground);
+  font-weight: 560;
+  color: var(--text);
   letter-spacing: -0.02em;
+  line-height: 1.1;
 }
-
-.stat-change {
-  font-size: 13px;
-  font-weight: 600;
-  padding: 2px 7px;
-  border-radius: 4px;
-}
-
-.stat-change.positive { color: var(--green); background: rgba(56, 217, 154, 0.1); }
-.stat-change.negative { color: #e5484d; background: rgba(229, 72, 77, 0.1); }
-
 .stat-foot {
-  font-size: 12px;
-  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.stat-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--text-xs);
+  font-weight: 540;
+  font-variant-numeric: tabular-nums;
+}
+.stat-change.good {
+  color: var(--success);
+}
+.stat-change.bad {
+  color: var(--danger);
+}
+.stat-hint {
+  font-size: var(--text-xs);
+  color: var(--text-3);
 }
 </style>
+

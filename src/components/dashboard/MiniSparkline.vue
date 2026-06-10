@@ -9,7 +9,7 @@ const props = withDefaults(defineProps<{
 }>(), {
   width: 72,
   height: 28,
-  color: '#38d99a',
+  color: 'var(--accent)',
 })
 
 const path = computed(() => {
@@ -40,7 +40,7 @@ const areaPath = computed(() => {
 
 <template>
   <svg :width="width" :height="height" :viewBox="`0 0 ${width} ${height}`" class="sparkline">
-    <path :d="areaPath" :fill="`${color}18`" />
+    <path :d="areaPath" :fill="color" fill-opacity="0.09" />
     <path :d="path" :stroke="color" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
   </svg>
 </template>

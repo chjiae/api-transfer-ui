@@ -1,14 +1,12 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import HomeView from '@/views/HomeView.vue'
 import LoginView from '@/views/LoginView.vue'
-
-const Placeholder = () => import('@/views/PlaceholderView.vue')
+import { getToken } from '@/network/http'
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', name: 'home', component: HomeView },
-    { path: '/login', name: 'login', component: LoginView },
+    { path: '/', redirect: '/dashboard' },
+    { path: '/login', name: 'login', component: LoginView, meta: { public: true } },
     {
       path: '/dashboard',
       component: () => import('@/layouts/DashboardLayout.vue'),
@@ -18,18 +16,27 @@ const router = createRouter({
         { path: 'analytics', name: 'analytics', component: () => import('@/views/DashboardView.vue') },
         { path: 'channels', name: 'channels', component: () => import('@/views/ChannelsView.vue') },
         { path: 'models', name: 'models', component: () => import('@/views/ModelsView.vue') },
-        { path: 'routing', name: 'routing', component: Placeholder },
-        { path: 'load-balance', name: 'load-balance', component: Placeholder },
+        { path: 'routing', name: 'routing', component: () => import('@/views/PlaceholderView.vue') },
+        { path: 'load-balance', name: 'load-balance', component: () => import('@/views/PlaceholderView.vue') },
         { path: 'usage', name: 'usage', component: () => import('@/views/UsageLogsView.vue') },
         { path: 'cost', name: 'cost', component: () => import('@/views/CostAnalysisView.vue') },
-        { path: 'billing', name: 'billing', component: Placeholder },
+        { path: 'billing', name: 'billing', component: () => import('@/views/PlaceholderView.vue') },
         { path: 'api-keys', name: 'api-keys', component: () => import('@/views/ApiKeysView.vue') },
         { path: 'permissions', name: 'permissions', component: () => import('@/views/UserManagementView.vue') },
         { path: 'quota', name: 'quota', component: () => import('@/views/UserManagementView.vue') },
         { path: 'audit', name: 'audit', component: () => import('@/views/AuditLogView.vue') },
       ],
     },
+    { path: '/:pathMatch(.*)*', redirect: '/dashboard' },
   ],
+})
+
+// 登录守卫：未登录访问受保护页 → 跳登录；已登录访问登录页 → 跳概览
+router.beforeEach((to) => {
+  const authed = !!getToken()
+  if (!to.meta.public && !authed) return { name: 'login' }
+  if (to.name === 'login' && authed) return { name: 'dashboard' }
+  return true
 })
 
 export default router

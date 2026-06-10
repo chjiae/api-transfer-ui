@@ -1,8 +1,14 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { DollarSign, Loader2, RefreshCw, TrendingUp } from 'lucide-vue-next'
+import { PhArrowClockwise as RefreshCw } from '@phosphor-icons/vue'
 import axios from 'axios'
 import { getToken } from '@/network/http'
+import UiPageHeader from '@/components/ui/UiPageHeader.vue'
+import UiButton from '@/components/ui/UiButton.vue'
+import UiCard from '@/components/ui/UiCard.vue'
+import UiSelect from '@/components/ui/UiSelect.vue'
+import UiSpinner from '@/components/ui/UiSpinner.vue'
+import UiEmpty from '@/components/ui/UiEmpty.vue'
 
 interface ModelCost {
   model: string
@@ -11,22 +17,22 @@ interface ModelCost {
   requests: number
   percentage: number
 }
-
 interface TrendPoint {
   date: string
   cost: number
 }
-
-const data = ref<{
+interface CostData {
   models: ModelCost[]
   totalCost: number
   totalTokens: number
   totalRequests: number
   avgLatency: number
   trend: TrendPoint[]
-} | null>(null)
+}
+
+const data = ref<CostData | null>(null)
 const loading = ref(true)
-const hours = ref(168)
+const hours = ref('168')
 
 const api = axios.create({ baseURL: '/api' })
 api.interceptors.request.use((c) => {
@@ -38,116 +44,202 @@ api.interceptors.request.use((c) => {
 const load = async () => {
   loading.value = true
   try {
-    const { data: resp } = await api.get<{ code: number; data: any }>('/dashboard/cost-analysis', { params: { hours: hours.value } })
+    const { data: resp } = await api.get<{ code: number; data: CostData }>('/dashboard/cost-analysis', {
+      params: { hours: Number(hours.value) },
+    })
     data.value = resp.data
-  } finally { loading.value = false }
+  } finally {
+    loading.value = false
+  }
 }
-
 onMounted(load)
 
-const COLORS = ['#1683ff', '#f5a94e', '#38d99a', '#8b5cf6', '#64748b', '#e5484d', '#ff6b6b']
+// 协调的图表色板（与 Donut 一致）
+const COLORS = ['#4b45e4', '#3ba7a0', '#d99a3c', '#8b78e6', '#6b8aae', '#cf6b6b', '#9a9a93']
+
+const summaryCards = (d: CostData) => [
+  { label: '总成本', value: '$' + d.totalCost.toFixed(2) },
+  { label: '总请求', value: d.totalRequests.toLocaleString() },
+  { label: '总 Token', value: (d.totalTokens / 1e6).toFixed(2) + 'M' },
+  { label: '平均延迟', value: d.avgLatency.toLocaleString() + ' ms' },
+]
 </script>
 
 <template>
-  <div class="page">
-    <div class="page-header">
-      <h1>成本分析</h1>
-      <div class="header-actions">
-        <select v-model="hours" class="filter-select" @change="load">
-          <option :value="24">最近 24h</option>
-          <option :value="168">最近 7 天</option>
-          <option :value="720">最近 30 天</option>
-        </select>
-        <button class="action-btn" @click="load"><RefreshCw :size="15" :class="{ spin: loading }" /> 刷新</button>
-      </div>
-    </div>
+  <div class="page-wrap">
+    <UiPageHeader title="成本分析" description="按模型与时间维度拆解网关消费，定位主要成本来源">
+      <template #actions>
+        <UiSelect v-model="hours" size="sm" @update:modelValue="load">
+          <option value="24">最近 24 小时</option>
+          <option value="168">最近 7 天</option>
+          <option value="720">最近 30 天</option>
+        </UiSelect>
+        <UiButton variant="ghost" size="sm" :loading="loading" @click="load">
+          <RefreshCw :size="15" /> 刷新
+        </UiButton>
+      </template>
+    </UiPageHeader>
 
-    <div v-if="loading" class="state-box"><Loader2 :size="28" class="spin" /><span>加载中...</span></div>
+    <UiCard v-if="loading && !data" pad="none">
+      <UiSpinner center label="正在统计成本" />
+    </UiCard>
 
     <template v-else-if="data">
-      <div class="summary-row">
-        <div class="sum-card">
-          <DollarSign :size="20" />
-          <div><span>总成本</span><b>${{ data.totalCost.toFixed(2) }}</b></div>
-        </div>
-        <div class="sum-card">
-          <TrendingUp :size="20" />
-          <div><span>总请求</span><b>{{ data.totalRequests.toLocaleString() }}</b></div>
-        </div>
-        <div class="sum-card">
-          <span class="sum-icon">T</span>
-          <div><span>总 Token</span><b>{{ (data.totalTokens / 1e6).toFixed(1) }}M</b></div>
-        </div>
-        <div class="sum-card">
-          <span class="sum-icon">ms</span>
-          <div><span>平均延迟</span><b>{{ data.avgLatency }}ms</b></div>
-        </div>
+      <div class="sum-grid">
+        <UiCard v-for="c in summaryCards(data)" :key="c.label" pad="md" class="sum-card">
+          <span class="sum-label">{{ c.label }}</span>
+          <span class="sum-val tnum">{{ c.value }}</span>
+        </UiCard>
       </div>
 
-      <div class="chart-row">
-        <div class="card">
-          <h3>按模型成本分布</h3>
-          <div class="model-bars">
+      <div class="cost-row">
+        <UiCard pad="lg">
+          <h3 class="card-title">按模型成本占比</h3>
+          <UiEmpty v-if="!data.models.length" size="sm" title="暂无成本数据" description="产生计费调用后会在此显示" />
+          <div v-else class="bars">
             <div v-for="(m, i) in data.models" :key="m.model" class="bar-row">
-              <span class="bar-label">{{ m.model }}</span>
+              <span class="bar-label mono">{{ m.model }}</span>
               <div class="bar-track">
-                <div class="bar-fill" :style="{ width: m.percentage + '%', background: COLORS[i % COLORS.length] }"></div>
+                <div class="bar-fill" :style="{ width: m.percentage + '%', background: COLORS[i % COLORS.length] }" />
               </div>
-              <span class="bar-val">${{ m.cost.toFixed(2) }} ({{ m.percentage.toFixed(1) }}%)</span>
+              <span class="bar-val mono">${{ m.cost.toFixed(2) }}<span class="bar-pct">{{ m.percentage.toFixed(1) }}%</span></span>
             </div>
           </div>
-        </div>
+        </UiCard>
 
-        <div class="card">
-          <h3>每日成本趋势</h3>
-          <div v-if="data.trend.length" class="trend-list">
+        <UiCard pad="lg">
+          <h3 class="card-title">每日成本趋势</h3>
+          <UiEmpty v-if="!data.trend.length" size="sm" title="暂无趋势数据" description="累积几天的调用后趋势会更清晰" />
+          <div v-else class="trend">
             <div v-for="p in data.trend.slice(-14)" :key="p.date" class="trend-row">
-              <span>{{ p.date }}</span>
-              <span class="trend-cost">${{ p.cost.toFixed(2) }}</span>
+              <span class="trend-date mono">{{ p.date }}</span>
+              <span class="trend-cost mono">${{ p.cost.toFixed(2) }}</span>
             </div>
           </div>
-          <div v-else class="empty-note">暂无数据</div>
-        </div>
+        </UiCard>
       </div>
     </template>
   </div>
 </template>
 
 <style scoped>
-.page { padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
-.page-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
-h1 { margin: 0; font-size: 22px; font-weight: 680; }
-.header-actions { display: flex; align-items: center; gap: 12px; }
-.filter-select { height: 33px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface-2); color: var(--foreground); font-size: 13px; cursor: pointer; }
-.action-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 13px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 13px; cursor: pointer; }
-.action-btn:hover { color: var(--foreground); border-color: var(--line-strong); }
-.spin { animation: spin 1s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-.state-box { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 64px; color: var(--muted); }
-
-.summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
-.sum-card { display: flex; align-items: center; gap: 14px; padding: 18px 22px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--accent-bright); }
-.sum-card div { display: flex; flex-direction: column; gap: 2px; }
-.sum-card span { font-size: 12px; color: var(--muted); }
-.sum-card b { font-size: 18px; color: var(--foreground); font-weight: 700; }
-.sum-icon { font-size: 16px; font-weight: 800; width: 32px; text-align: center; }
-
-.chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.card { padding: 20px 22px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); }
-.card h3 { margin: 0 0 16px; font-size: 15px; font-weight: 600; }
-
-.model-bars { display: flex; flex-direction: column; gap: 14px; }
-.bar-row { display: flex; align-items: center; gap: 12px; }
-.bar-label { width: 100px; font-size: 13px; color: var(--foreground); flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bar-track { flex: 1; height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
-.bar-fill { height: 100%; border-radius: 4px; min-width: 2px; }
-.bar-val { width: 150px; font-size: 12px; color: var(--muted); text-align: right; flex-shrink: 0; }
-
-.trend-list { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; }
-.trend-row { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); padding: 4px 0; border-bottom: 1px solid var(--line); }
-.trend-cost { color: var(--foreground); font-weight: 600; }
-.empty-note { padding: 40px 0; text-align: center; color: var(--muted); font-size: 14px; }
-
-@media (max-width: 1200px) { .summary-row { grid-template-columns: repeat(2, 1fr); } .chart-row { grid-template-columns: 1fr; } }
-@media (max-width: 767px) { .page { padding: 16px; } .summary-row { grid-template-columns: 1fr; } }
+.sum-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.sum-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sum-label {
+  font-size: var(--text-sm);
+  color: var(--text-3);
+}
+.sum-val {
+  font-size: 26px;
+  font-weight: 560;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+.cost-row {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: var(--space-4);
+}
+.card-title {
+  margin: 0 0 var(--space-5);
+  font-size: var(--text-md);
+  font-weight: 560;
+}
+.bars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.bar-label {
+  width: 130px;
+  flex-shrink: 0;
+  font-size: var(--text-sm);
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bar-track {
+  flex: 1;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  min-width: 3px;
+  transition: width var(--dur-slow) var(--ease);
+}
+.bar-val {
+  width: 120px;
+  flex-shrink: 0;
+  text-align: right;
+  font-size: var(--text-sm);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+.bar-pct {
+  font-size: 11px;
+  color: var(--text-3);
+}
+.trend {
+  display: flex;
+  flex-direction: column;
+  max-height: 340px;
+  overflow-y: auto;
+}
+.trend-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  font-size: var(--text-sm);
+  border-bottom: 1px solid var(--line);
+}
+.trend-row:last-child {
+  border-bottom: none;
+}
+.trend-date {
+  color: var(--text-3);
+}
+.trend-cost {
+  color: var(--text);
+  font-weight: 540;
+}
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 1100px) {
+  .sum-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .cost-row {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 640px) {
+  .sum-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

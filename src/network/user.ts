@@ -28,6 +28,11 @@ export async function listUsers(): Promise<UserView[]> {
   return data.data
 }
 
+export async function fetchSelf(): Promise<UserView> {
+  const { data } = await api.get<{ code: number; data: UserView }>('/user/self')
+  return data.data
+}
+
 export async function updateUserQuota(userId: number, quota: number): Promise<void> {
   await api.put(`/users/${userId}/quota`, { quota })
 }

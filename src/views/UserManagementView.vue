@@ -1,7 +1,20 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { Loader2, RefreshCw, Shield, UserRound, Users } from 'lucide-vue-next'
+import {
+  PhArrowClockwise as RefreshCw,
+  PhCheck as Check,
+  PhX as X,
+  PhPencilSimple as Pencil,
+} from '@phosphor-icons/vue'
 import { listUsers, updateUserQuota, updateUserStatus, type UserView } from '@/network/user'
+import { toast } from '@/lib/toast'
+import { confirm } from '@/lib/confirm'
+import UiPageHeader from '@/components/ui/UiPageHeader.vue'
+import UiButton from '@/components/ui/UiButton.vue'
+import UiCard from '@/components/ui/UiCard.vue'
+import UiBadge from '@/components/ui/UiBadge.vue'
+import UiSpinner from '@/components/ui/UiSpinner.vue'
+import UiEmpty from '@/components/ui/UiEmpty.vue'
 
 const users = ref<UserView[]>([])
 const loading = ref(true)
@@ -10,111 +23,213 @@ const error = ref('')
 const load = async () => {
   loading.value = true
   error.value = ''
-  try { users.value = await listUsers() }
-  catch (e) { error.value = e instanceof Error ? e.message : '加载失败' }
-  finally { loading.value = false }
+  try {
+    users.value = await listUsers()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '加载失败'
+  } finally {
+    loading.value = false
+  }
 }
-
 onMounted(load)
 
 const editing = ref<number | null>(null)
 const editQuota = ref(0)
+const saving = ref(false)
 
-const startEditQuota = (u: UserView) => {
+const startEdit = (u: UserView) => {
   editing.value = u.id
   editQuota.value = u.quota
 }
-
+const cancelEdit = () => {
+  editing.value = null
+}
 const saveQuota = async (u: UserView) => {
+  saving.value = true
   try {
     await updateUserQuota(u.id, editQuota.value)
     u.quota = editQuota.value
     editing.value = null
-  } catch (e) { alert(e instanceof Error ? e.message : '更新失败') }
+    toast.success('额度已更新')
+  } catch (e) {
+    toast.error('更新失败', e instanceof Error ? e.message : undefined)
+  } finally {
+    saving.value = false
+  }
 }
 
 const toggleStatus = async (u: UserView) => {
-  const newStatus = u.status === 1 ? 2 : 1
+  const disabling = u.status === 1
+  if (disabling) {
+    const ok = await confirm({
+      title: '停用成员',
+      message: `停用「${u.displayName || u.username}」后，该成员将无法登录或调用接口。`,
+      confirmText: '停用',
+      danger: true,
+    })
+    if (!ok) return
+  }
+  const newStatus = disabling ? 2 : 1
   try {
     await updateUserStatus(u.id, newStatus)
     u.status = newStatus
-  } catch (e) { alert(e instanceof Error ? e.message : '操作失败') }
+    toast.success(disabling ? '成员已停用' : '成员已启用')
+  } catch (e) {
+    toast.error('操作失败', e instanceof Error ? e.message : undefined)
+  }
 }
 
-const roleLabel = (r: number) => ({ 1: '用户', 10: '管理员', 100: '超级管理员' }[r] ?? r.toString())
+const roleMeta: Record<number, { label: string; tone: 'brand' | 'warning' | 'neutral' }> = {
+  1: { label: '用户', tone: 'neutral' },
+  10: { label: '管理员', tone: 'brand' },
+  100: { label: '超级管理员', tone: 'warning' },
+}
+const roleOf = (r: number) => roleMeta[r] || { label: String(r), tone: 'neutral' as const }
+const initial = (u: UserView) => (u.displayName || u.username).charAt(0).toUpperCase()
+const num = (v: number | null | undefined) => (v ?? 0).toLocaleString()
 </script>
 
 <template>
-  <div class="page">
-    <div class="page-header">
-      <h1>权限管理</h1>
-      <button class="action-btn" @click="load"><RefreshCw :size="15" :class="{ spin: loading }" /> 刷新</button>
-    </div>
+  <div class="page-wrap">
+    <UiPageHeader title="成员与权限" description="管理租户内的成员账号、角色与调用额度">
+      <template #actions>
+        <UiButton variant="ghost" size="sm" :loading="loading" @click="load">
+          <RefreshCw :size="15" /> 刷新
+        </UiButton>
+      </template>
+    </UiPageHeader>
 
-    <div v-if="loading" class="state-box"><Loader2 :size="28" class="spin" /><span>加载中...</span></div>
+    <UiCard v-if="loading && !users.length" pad="none">
+      <UiSpinner center label="正在加载成员列表" />
+    </UiCard>
 
-    <div v-else class="user-grid">
-      <div v-for="u in users" :key="u.id" class="user-card">
-        <div class="user-avatar">
-          <Shield v-if="u.role >= 100" :size="28" />
-          <Users v-else-if="u.role >= 10" :size="28" />
-          <UserRound v-else :size="28" />
-        </div>
-        <div class="user-info">
-          <div class="user-name">{{ u.displayName || u.username }}</div>
-          <div class="user-role">{{ roleLabel(u.role) }}</div>
-          <div class="user-meta">
-            <span>额度: <b>{{ u.quota.toLocaleString() }}</b></span>
-            <span>请求: <b>{{ u.requestCount.toLocaleString() }}</b></span>
-          </div>
-          <div class="user-actions">
-            <template v-if="editing === u.id">
-              <input v-model.number="editQuota" type="number" class="quota-input" />
-              <button class="btn-sm" @click="saveQuota(u)">保存</button>
-              <button class="btn-sm btn-ghost" @click="editing = null">取消</button>
-            </template>
-            <template v-else>
-              <button class="btn-sm" @click="startEditQuota(u)">设额度</button>
-              <button class="btn-sm" :class="u.status === 1 ? 'btn-warn' : 'btn-ok'" @click="toggleStatus(u)">
-                {{ u.status === 1 ? '禁用' : '启用' }}
-              </button>
-            </template>
-          </div>
-        </div>
-        <div class="user-status" :class="u.status === 1 ? 'on' : 'off'">
-          {{ u.status === 1 ? '启用' : '禁用' }}
-        </div>
+    <UiCard v-else-if="error && !users.length" pad="lg">
+      <UiEmpty title="无法加载成员" :description="error">
+        <template #action><UiButton variant="primary" @click="load">重新加载</UiButton></template>
+      </UiEmpty>
+    </UiCard>
+
+    <UiCard v-else pad="none">
+      <UiEmpty v-if="!users.length" title="还没有成员" description="该租户下暂无其他成员账号" />
+      <div v-else class="rt-scroll">
+        <table class="rt">
+          <thead>
+            <tr>
+              <th>成员</th>
+              <th>角色</th>
+              <th class="num">额度</th>
+              <th class="num">已用</th>
+              <th class="num">请求数</th>
+              <th>状态</th>
+              <th class="num">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="u in users" :key="u.id">
+              <td>
+                <div class="member">
+                  <span class="m-avatar">{{ initial(u) }}</span>
+                  <div class="m-text">
+                    <span class="m-name">{{ u.displayName || u.username }}</span>
+                    <span class="m-sub mono">@{{ u.username }}</span>
+                  </div>
+                </div>
+              </td>
+              <td><UiBadge :tone="roleOf(u.role).tone">{{ roleOf(u.role).label }}</UiBadge></td>
+              <td class="num mono">
+                <input
+                  v-if="editing === u.id"
+                  v-model.number="editQuota"
+                  type="number"
+                  class="quota-input"
+                  @keyup.enter="saveQuota(u)"
+                />
+                <span v-else>{{ num(u.quota) }}</span>
+              </td>
+              <td class="num mono dim">{{ num(u.usedQuota) }}</td>
+              <td class="num mono dim">{{ num(u.requestCount) }}</td>
+              <td>
+                <UiBadge :tone="u.status === 1 ? 'success' : 'neutral'" dot>
+                  {{ u.status === 1 ? '启用' : '停用' }}
+                </UiBadge>
+              </td>
+              <td class="num">
+                <div class="row-acts">
+                  <template v-if="editing === u.id">
+                    <button class="row-icon-btn" title="保存" :disabled="saving" @click="saveQuota(u)">
+                      <UiSpinner v-if="saving" :size="14" /><Check v-else :size="16" />
+                    </button>
+                    <button class="row-icon-btn" title="取消" @click="cancelEdit"><X :size="16" /></button>
+                  </template>
+                  <template v-else>
+                    <button class="row-icon-btn" title="设置额度" @click="startEdit(u)"><Pencil :size="15" /></button>
+                    <UiButton
+                      :variant="u.status === 1 ? 'danger' : 'subtle'"
+                      size="sm"
+                      @click="toggleStatus(u)"
+                    >
+                      {{ u.status === 1 ? '停用' : '启用' }}
+                    </UiButton>
+                  </template>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
-    </div>
+    </UiCard>
   </div>
 </template>
 
 <style scoped>
-.page { padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
-.page-header { display: flex; align-items: center; justify-content: space-between; }
-.page-header h1 { margin: 0; font-size: 22px; font-weight: 680; letter-spacing: -0.03em; }
-.action-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 13px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 13px; cursor: pointer; }
-.action-btn:hover { color: var(--foreground); border-color: var(--line-strong); }
-.spin { animation: spin 1s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-.state-box { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 64px 24px; color: var(--muted); }
-
-.user-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
-.user-card { display: flex; gap: 16px; padding: 20px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); }
-.user-avatar { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--surface-2); color: var(--accent-bright); flex-shrink: 0; }
-.user-info { flex: 1; display: flex; flex-direction: column; gap: 6px; }
-.user-name { font-weight: 650; font-size: 15px; }
-.user-role { font-size: 12px; color: var(--accent-bright); }
-.user-meta { display: flex; gap: 16px; font-size: 12px; color: var(--muted); }
-.user-meta b { color: var(--foreground); }
-.user-actions { display: flex; gap: 6px; margin-top: 4px; }
-.user-status { font-size: 11px; padding: 2px 8px; border-radius: 4px; height: fit-content; white-space: nowrap; }
-.user-status.on { color: var(--green); background: rgba(56,217,154,0.1); }
-.user-status.off { color: var(--muted); background: rgba(255,255,255,0.04); }
-.btn-sm { height: 28px; padding: 0 10px; border-radius: 5px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; }
-.btn-sm:hover { color: var(--foreground); border-color: var(--line-strong); }
-.btn-ghost { border: none; }
-.btn-warn { color: #f5a94e !important; border-color: rgba(245,169,78,0.4); }
-.btn-ok { color: var(--green) !important; border-color: rgba(56,217,154,0.4); }
-.quota-input { width: 100px; height: 28px; padding: 0 8px; border-radius: 5px; border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--foreground); font-size: 13px; outline: none; }
+.member {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.m-avatar {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-on-brand);
+  background: var(--accent);
+  border-radius: var(--radius-sm);
+}
+.m-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.m-name {
+  font-size: var(--text-sm);
+  font-weight: 540;
+  color: var(--text);
+}
+.m-sub {
+  font-size: 11px;
+  color: var(--text-3);
+}
+.quota-input {
+  width: 110px;
+  height: 30px;
+  padding: 0 9px;
+  text-align: right;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+.row-acts {
+  align-items: center;
+}
 </style>

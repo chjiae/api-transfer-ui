@@ -1,23 +1,23 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import {
-  Bot,
-  Loader2,
-  MessageSquarePlus,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Send,
-  Trash2,
-  User,
-} from 'lucide-vue-next'
+  PhRobot as Bot,
+  PhPlus as Plus,
+  PhSidebarSimple as Sidebar,
+  PhPaperPlaneRight as Send,
+  PhTrash as Trash,
+  PhChatCircleDots as ChatIcon,
+} from '@phosphor-icons/vue'
 import axios from 'axios'
 import { getToken } from '@/network/http'
+import { confirm } from '@/lib/confirm'
+import UiSelect from '@/components/ui/UiSelect.vue'
+import UiSpinner from '@/components/ui/UiSpinner.vue'
 
 interface Message {
   role: 'user' | 'assistant'
   content: string
 }
-
 interface Conversation {
   id: string
   title: string
@@ -37,9 +37,8 @@ api.interceptors.request.use((c) => {
   return c
 })
 
-// -- State --
 const conversations = ref<Conversation[]>([])
-const activeId = ref<string>('')
+const activeId = ref('')
 const input = ref('')
 const sending = ref(false)
 const models = ref<string[]>([])
@@ -47,68 +46,59 @@ const selectedModel = ref('auto')
 const error = ref('')
 const sidebarOpen = ref(true)
 
-// -- Load from localStorage --
 const loadFromStorage = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     conversations.value = raw ? JSON.parse(raw) : []
     activeId.value = localStorage.getItem(ACTIVE_KEY) || ''
-  } catch { conversations.value = [] }
-}
-
-const saveToStorage = () => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations.value))
-}
-
-loadFromStorage()
-
-// -- Active conversation --
-const activeConvo = computed(() =>
-  conversations.value.find((c) => c.id === activeId.value) ?? null,
-)
-const messages = computed(() => activeConvo.value?.messages ?? [])
-
-const ensureActiveConvo = () => {
-  if (!activeConvo.value && conversations.value.length > 0) {
-    activeId.value = conversations.value[0].id
+  } catch {
+    conversations.value = []
   }
 }
+const saveToStorage = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations.value))
+loadFromStorage()
+
+const activeConvo = computed(() => conversations.value.find((c) => c.id === activeId.value) ?? null)
+const messages = computed(() => activeConvo.value?.messages ?? [])
 
 onMounted(async () => {
-  ensureActiveConvo()
+  if (!activeConvo.value && conversations.value.length > 0) activeId.value = conversations.value[0].id
   localStorage.setItem(ACTIVE_KEY, activeId.value)
-  // load available models
   try {
     const { data: m } = await axios.get<{ code: number; data: string[] }>('/api/models/available', {
       headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
     })
     models.value = m.data
-  } catch {}
+  } catch {
+    /* ignore */
+  }
 })
-
-// -- Persist activeId --
 watch(activeId, (v) => localStorage.setItem(ACTIVE_KEY, v))
 
-// -- New chat --
 const newChat = () => {
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
-  const convo: Conversation = {
+  conversations.value.unshift({
     id,
     title: '新对话',
     model: selectedModel.value,
     messages: [],
     createdAt: Date.now(),
     updatedAt: Date.now(),
-  }
-  conversations.value.unshift(convo)
+  })
   activeId.value = id
   error.value = ''
   input.value = ''
   saveToStorage()
 }
 
-// -- Delete chat --
-const deleteChat = (id: string) => {
+const deleteChat = async (id: string, title: string) => {
+  const ok = await confirm({
+    title: '删除对话',
+    message: `「${title}」的全部消息将被清除，无法恢复。`,
+    confirmText: '删除',
+    danger: true,
+  })
+  if (!ok) return
   conversations.value = conversations.value.filter((c) => c.id !== id)
   if (activeId.value === id) {
     activeId.value = conversations.value[0]?.id ?? ''
@@ -118,28 +108,20 @@ const deleteChat = (id: string) => {
   saveToStorage()
 }
 
-// -- Send message --
 const sendMessage = async () => {
   const text = input.value.trim()
-  if (!text || sending.value || !activeConvo.value) return
-
-  const convo = activeConvo.value
+  if (!text || sending.value) return
+  if (!activeConvo.value) newChat()
+  const convo = activeConvo.value!
   input.value = ''
   sending.value = true
   error.value = ''
-
-  // Auto-title from first user message
-  if (convo.messages.length === 0) {
-    convo.title = text.length > 30 ? text.slice(0, 30) + '...' : text
-  }
-
+  if (convo.messages.length === 0) convo.title = text.length > 24 ? text.slice(0, 24) + '…' : text
   convo.messages.push({ role: 'user', content: text })
   convo.updatedAt = Date.now()
   saveToStorage()
-
   await nextTick()
   scrollBottom()
-
   try {
     const { data } = await api.post('/chat/completions', {
       model: selectedModel.value,
@@ -150,8 +132,10 @@ const sendMessage = async () => {
     convo.messages.push({ role: 'assistant', content: reply })
     convo.updatedAt = Date.now()
     saveToStorage()
-  } catch (e: any) {
-    error.value = e?.response?.data?.error?.message || e?.response?.data?.message || e.message || '请求失败'
+  } catch (e) {
+    const err = e as { response?: { data?: { error?: { message?: string }; message?: string } }; message?: string }
+    error.value =
+      err?.response?.data?.error?.message || err?.response?.data?.message || err.message || '请求失败'
   } finally {
     sending.value = false
     await nextTick()
@@ -164,7 +148,6 @@ const scrollBottom = () => {
   if (el) el.scrollTop = el.scrollHeight
 }
 
-// -- Switch conversation --
 const switchConvo = (id: string) => {
   activeId.value = id
   input.value = ''
@@ -172,121 +155,100 @@ const switchConvo = (id: string) => {
   nextTick(scrollBottom)
 }
 
-// -- Format date --
+const onInput = (e: Event) => {
+  const ta = e.target as HTMLTextAreaElement
+  ta.style.height = 'auto'
+  ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'
+}
+
 const fmtDate = (ts: number) => {
   const d = new Date(ts)
   const now = new Date()
-  if (d.toDateString() === now.toDateString()) {
+  if (d.toDateString() === now.toDateString())
     return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-  }
-  return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+  return d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
 }
 </script>
 
 <template>
   <div class="chat-layout">
-    <!-- Sidebar -->
-    <aside class="chat-sidebar" :class="{ closed: !sidebarOpen }">
-      <div class="sidebar-head">
-        <button class="sidebar-new-btn" @click="newChat">
-          <MessageSquarePlus :size="17" />
-          <span v-show="sidebarOpen">新建对话</span>
+    <!-- 会话侧栏 -->
+    <aside class="cv-sidebar" :class="{ closed: !sidebarOpen }">
+      <div class="cv-sidebar-head">
+        <button class="new-btn" @click="newChat">
+          <Plus :size="16" /> 新建对话
         </button>
       </div>
-      <div class="sidebar-list">
-        <div
+      <div class="cv-list">
+        <button
           v-for="convo in conversations"
           :key="convo.id"
-          class="sidebar-item"
+          class="cv-item"
           :class="{ active: convo.id === activeId }"
           @click="switchConvo(convo.id)"
         >
-          <span class="item-text">{{ convo.title }}</span>
-          <span class="item-date">{{ fmtDate(convo.updatedAt) }}</span>
-          <button
-            class="item-delete"
-            title="删除"
-            @click.stop="deleteChat(convo.id)"
-          >
-            <Trash2 :size="14" />
-          </button>
-        </div>
-        <div v-if="!conversations.length && sidebarOpen" class="sidebar-empty">
-          暂无对话记录
-        </div>
+          <span class="cv-item-title">{{ convo.title }}</span>
+          <span class="cv-item-date mono">{{ fmtDate(convo.updatedAt) }}</span>
+          <span class="cv-item-del" title="删除" @click.stop="deleteChat(convo.id, convo.title)">
+            <Trash :size="14" />
+          </span>
+        </button>
+        <p v-if="!conversations.length" class="cv-empty">还没有对话记录</p>
       </div>
     </aside>
 
-    <!-- Main chat area -->
-    <div class="chat-main">
-      <div class="chat-header">
-        <div class="chat-header-left">
-          <button class="sidebar-toggle" @click="sidebarOpen = !sidebarOpen">
-            <PanelLeftOpen v-if="!sidebarOpen" :size="19" />
-            <PanelLeftClose v-else :size="19" />
+    <!-- 主区 -->
+    <div class="cv-main">
+      <header class="cv-head">
+        <div class="cv-head-left">
+          <button class="cv-toggle" :title="sidebarOpen ? '收起会话栏' : '展开会话栏'" @click="sidebarOpen = !sidebarOpen">
+            <Sidebar :size="18" />
           </button>
-          <h1><Bot :size="20" /> {{ activeConvo?.title || 'AI 对话' }}</h1>
+          <h2 class="cv-title">{{ activeConvo?.title || '调试对话' }}</h2>
         </div>
-        <div class="chat-header-right">
-          <select v-model="selectedModel" class="model-select">
-            <option value="auto">自动选择模型</option>
-            <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
-          </select>
-        </div>
-      </div>
+        <UiSelect v-model="selectedModel" size="sm">
+          <option value="auto">自动选择模型</option>
+          <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
+        </UiSelect>
+      </header>
 
-      <div id="chat-scroll" class="chat-messages">
-        <!-- Empty -->
-        <div v-if="!activeConvo && !sending" class="chat-empty">
-          <Bot :size="48" class="empty-icon" />
-          <h3>开始对话</h3>
-          <p>点击左侧「新建对话」或选择历史会话</p>
-        </div>
-        <div v-else-if="activeConvo && !messages.length && !sending" class="chat-empty">
-          <Bot :size="48" class="empty-icon" />
-          <h3>{{ activeConvo.title }}</h3>
-          <p>发送消息开始对话</p>
+      <div id="chat-scroll" class="cv-messages">
+        <div v-if="!messages.length && !sending" class="cv-welcome">
+          <span class="cv-welcome-icon"><ChatIcon :size="26" weight="duotone" /></span>
+          <h3>开始一段对话</h3>
+          <p>在下方输入消息，用你自己的额度直接试用已接入的模型。无需单独配置密钥。</p>
         </div>
 
-        <!-- Messages -->
-        <template v-for="(msg, i) in messages" :key="i">
-          <div class="chat-msg" :class="msg.role">
-            <div class="msg-avatar">
-              <User v-if="msg.role === 'user'" :size="17" />
-              <Bot v-else :size="17" />
-            </div>
-            <div class="msg-bubble">
-              <div class="msg-role">{{ msg.role === 'user' ? '你' : 'AI' }}</div>
-              <div class="msg-text">{{ msg.content }}</div>
-            </div>
-          </div>
-        </template>
+        <div v-for="(msg, i) in messages" :key="i" class="msg" :class="msg.role">
+          <span class="msg-avatar" :class="msg.role">
+            <Bot v-if="msg.role === 'assistant'" :size="16" />
+            <span v-else>你</span>
+          </span>
+          <div class="msg-bubble">{{ msg.content }}</div>
+        </div>
 
-        <!-- Sending indicator -->
-        <div v-if="sending" class="chat-msg assistant">
-          <div class="msg-avatar"><Bot :size="17" /></div>
-          <div class="msg-bubble">
-            <Loader2 :size="16" class="spin" />
-            <span class="thinking">思考中...</span>
+        <div v-if="sending" class="msg assistant">
+          <span class="msg-avatar assistant"><Bot :size="16" /></span>
+          <div class="msg-bubble thinking">
+            <UiSpinner :size="14" /> 正在生成回复
           </div>
         </div>
 
-        <!-- Error -->
-        <div v-if="error" class="chat-error">{{ error }}</div>
+        <div v-if="error" class="cv-error">{{ error }}</div>
       </div>
 
-      <!-- Input -->
-      <div class="chat-input-area">
+      <div class="cv-input">
         <textarea
           v-model="input"
-          class="chat-input"
-          :placeholder="activeConvo ? '输入消息... (Enter 发送)' : '请先创建或选择一个对话'"
+          class="cv-textarea"
+          placeholder="输入消息，Enter 发送，Shift+Enter 换行"
           rows="1"
-          :disabled="sending || !activeConvo"
+          :disabled="sending"
+          @input="onInput"
           @keydown.enter.exact.prevent="sendMessage"
-        ></textarea>
-        <button class="send-btn" :disabled="!input.trim() || sending || !activeConvo" @click="sendMessage">
-          <Send :size="18" />
+        />
+        <button class="cv-send" :disabled="!input.trim() || sending" @click="sendMessage">
+          <Send :size="17" weight="fill" />
         </button>
       </div>
     </div>
@@ -297,334 +259,338 @@ const fmtDate = (ts: number) => {
 .chat-layout {
   display: flex;
   height: calc(100dvh - 56px);
-  background: var(--background);
+  background: var(--canvas);
 }
 
-/* ---- Sidebar ---- */
-.chat-sidebar {
-  width: 260px;
-  min-width: 260px;
+/* 会话侧栏 */
+.cv-sidebar {
+  width: 256px;
+  min-width: 256px;
   display: flex;
   flex-direction: column;
   background: var(--surface);
   border-right: 1px solid var(--line);
-  transition: width 180ms ease, min-width 180ms ease;
+  transition: width var(--dur) var(--ease), min-width var(--dur) var(--ease);
   overflow: hidden;
 }
-
-.chat-sidebar.closed {
+.cv-sidebar.closed {
   width: 0;
   min-width: 0;
   border-right: none;
 }
-
-.sidebar-head {
-  padding: 14px;
-  border-bottom: 1px solid var(--line);
+.cv-sidebar-head {
+  padding: var(--space-3);
 }
-
-.sidebar-new-btn {
-  width: 100%;
-  display: inline-flex;
+.new-btn {
+  display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 9px 14px;
-  border-radius: 7px;
-  border: 1px solid var(--line-strong);
-  background: transparent;
-  color: var(--foreground);
-  font-size: 14px;
-  font-weight: 600;
+  width: 100%;
+  height: 38px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 520;
   cursor: pointer;
-  font-family: inherit;
-  transition: background 140ms;
   white-space: nowrap;
+  transition: background var(--dur-fast), border-color var(--dur-fast);
 }
-
-.sidebar-new-btn:hover { background: rgba(255,255,255,0.04); }
-
-.sidebar-list {
+.new-btn:hover {
+  background: var(--surface-2);
+  border-color: var(--line-strong);
+}
+.cv-list {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: 0 var(--space-2) var(--space-2);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
-
-.sidebar-item {
+.cv-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
-  border-radius: 7px;
+  padding: 9px 10px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
   cursor: pointer;
-  transition: background 120ms;
-  position: relative;
+  text-align: left;
+  transition: background var(--dur-fast);
 }
-
-.sidebar-item:hover { background: rgba(255,255,255,0.03); }
-.sidebar-item.active { background: rgba(22, 131, 255, 0.14); }
-
-.item-text {
+.cv-item:hover {
+  background: var(--surface-2);
+}
+.cv-item.active {
+  background: var(--accent-soft);
+}
+.cv-item-title {
   flex: 1;
-  font-size: 13px;
-  color: var(--foreground);
+  min-width: 0;
+  font-size: var(--text-sm);
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  min-width: 0;
 }
-
-.item-date {
-  font-size: 10px;
-  color: var(--muted);
+.cv-item.active .cv-item-title {
+  color: var(--accent-text);
+  font-weight: 520;
+}
+.cv-item-date {
+  font-size: 11px;
+  color: var(--text-3);
   flex-shrink: 0;
 }
-
-.item-delete {
+.cv-item-del {
   display: none;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 5px;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  color: var(--text-3);
   flex-shrink: 0;
 }
-
-.item-delete:hover { color: #e5484d; background: rgba(229,72,77,0.1); }
-.sidebar-item:hover .item-delete { display: flex; }
-
-.sidebar-empty {
-  padding: 24px 16px;
+.cv-item:hover .cv-item-del {
+  display: grid;
+}
+.cv-item-del:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.cv-empty {
+  padding: var(--space-6) var(--space-4);
   text-align: center;
-  font-size: 13px;
-  color: var(--muted);
+  font-size: var(--text-sm);
+  color: var(--text-3);
 }
 
-/* ---- Main ---- */
-.chat-main {
+/* 主区 */
+.cv-main {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
-
-.chat-header {
+.cv-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 20px;
+  gap: var(--space-3);
+  height: 52px;
+  padding: 0 var(--space-5);
   border-bottom: 1px solid var(--line);
-  min-height: 52px;
 }
-
-.chat-header-left {
+.cv-head-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   min-width: 0;
 }
-
-.chat-header h1 {
+.cv-toggle {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+.cv-toggle:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.cv-title {
   margin: 0;
-  font-size: 16px;
-  font-weight: 650;
+  font-size: var(--text-md);
+  font-weight: 560;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.chat-header-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}
-
-.sidebar-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.sidebar-toggle:hover { color: var(--foreground); background: rgba(255,255,255,0.04); }
-
-.model-select {
-  height: 33px;
-  padding: 0 10px;
-  border-radius: 6px;
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  color: var(--foreground);
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.model-select option { background: var(--surface); }
-
-/* ---- Messages ---- */
-.chat-messages {
+/* 消息流 */
+.cv-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 24px;
+  padding: var(--space-6);
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--space-5);
 }
-
-.chat-empty {
+.cv-welcome {
+  margin: auto;
+  max-width: 380px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 12px;
-  flex: 1;
-  color: var(--muted);
   text-align: center;
+  color: var(--text-3);
+}
+.cv-welcome-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.cv-welcome h3 {
+  margin: 0 0 6px;
+  font-size: var(--text-lg);
+  font-weight: 560;
+  color: var(--text);
+}
+.cv-welcome p {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.6;
 }
 
-.empty-icon { opacity: 0.3; }
-.chat-empty h3 { margin: 0; font-size: 18px; color: var(--foreground); }
-.chat-empty p { margin: 0; font-size: 14px; }
-
-.chat-msg {
+.msg {
   display: flex;
   gap: 12px;
-  max-width: 85%;
+  max-width: 760px;
+  width: 100%;
+  margin: 0 auto;
 }
-
-.chat-msg.user { align-self: flex-end; flex-direction: row-reverse; }
-.chat-msg.assistant { align-self: flex-start; }
-
 .msg-avatar {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: var(--surface-2);
-  color: var(--accent-bright);
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
   flex-shrink: 0;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 600;
 }
-
-.chat-msg.user .msg-avatar { color: var(--muted); }
-
+.msg-avatar.assistant {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.msg-avatar.user {
+  background: var(--surface-3);
+  color: var(--text-2);
+}
+.msg.user {
+  flex-direction: row-reverse;
+}
 .msg-bubble {
-  padding: 12px 16px;
-  border-radius: 10px;
-  font-size: 14px;
+  padding: 11px 15px;
+  border-radius: var(--radius-lg);
+  font-size: var(--text-base);
   line-height: 1.65;
-  min-width: 0;
+  white-space: pre-wrap;
   word-break: break-word;
+  max-width: calc(100% - 42px);
 }
-
-.chat-msg.user .msg-bubble {
-  background: var(--accent);
-  color: #fff;
-  border-bottom-right-radius: 4px;
-}
-
-.chat-msg.assistant .msg-bubble {
-  background: var(--surface-2);
-  color: var(--foreground);
-  border-bottom-left-radius: 4px;
+.msg.assistant .msg-bubble {
+  background: var(--surface);
   border: 1px solid var(--line);
+  color: var(--text);
+  border-top-left-radius: var(--radius-xs);
+}
+.msg.user .msg-bubble {
+  background: var(--accent);
+  color: var(--text-on-brand);
+  border-top-right-radius: var(--radius-xs);
+}
+.thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-3);
+}
+.cv-error {
+  max-width: 760px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: var(--text-sm);
 }
 
-.msg-role { font-size: 11px; font-weight: 600; margin-bottom: 4px; opacity: 0.6; }
-
-.thinking { font-size: 13px; color: var(--muted); }
-
-.spin { animation: spin 1s linear infinite; margin-right: 6px; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.chat-error {
-  align-self: center;
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-size: 13px;
-  color: #e5484d;
-  background: rgba(229,72,77,0.08);
-}
-
-/* ---- Input ---- */
-.chat-input-area {
+/* 输入区 */
+.cv-input {
   display: flex;
   align-items: flex-end;
-  gap: 10px;
-  padding: 16px 20px;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
   border-top: 1px solid var(--line);
 }
-
-.chat-input {
+.cv-textarea {
   flex: 1;
-  min-height: 42px;
+  min-height: 44px;
   max-height: 160px;
-  padding: 10px 14px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  color: var(--foreground);
-  font-size: 14px;
+  padding: 11px 14px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--text-base);
   font-family: inherit;
+  line-height: 1.5;
   resize: none;
   outline: none;
-  line-height: 1.5;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
 }
-
-.chat-input:focus { border-color: var(--accent); }
-
-.send-btn {
-  width: 42px;
-  height: 42px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  border: none;
-  background: var(--accent);
-  color: #fff;
-  cursor: pointer;
+.cv-textarea:focus {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-focus);
+}
+.cv-textarea::placeholder {
+  color: var(--text-3);
+}
+.cv-send {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
   flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--accent);
+  color: var(--text-on-brand);
+  cursor: pointer;
+  transition: background var(--dur-fast), transform var(--dur-fast);
+}
+.cv-send:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+.cv-send:active:not(:disabled) {
+  transform: scale(0.94);
+}
+.cv-send:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
-.send-btn:hover { background: var(--accent-bright); }
-.send-btn:disabled { opacity: 0.4; cursor: default; }
-
-/* ---- Responsive ---- */
 @media (max-width: 767px) {
-  .chat-sidebar {
+  .cv-sidebar {
     position: fixed;
     left: 0;
     top: 56px;
     bottom: 0;
     z-index: 25;
-    box-shadow: 4px 0 20px rgba(0,0,0,0.4);
+    box-shadow: var(--shadow-lg);
   }
-
-  .chat-sidebar.closed {
-    width: 0;
-    min-width: 0;
+  .cv-sidebar.closed {
     box-shadow: none;
   }
-
-  .chat-messages { padding: 16px; }
-  .chat-input-area { padding: 12px 16px; }
-  .chat-header { padding: 10px 16px; }
+  .cv-messages {
+    padding: var(--space-4);
+  }
 }
 </style>

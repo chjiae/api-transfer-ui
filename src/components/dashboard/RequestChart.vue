@@ -68,8 +68,8 @@ const hoverIndex = ref<number | null>(null)
           :y="PAD.top + plotH - (v / maxReq) * plotH"
           :width="barWidth"
           :height="(v / maxReq) * plotH"
-          :fill="hoverIndex === i ? '#43a4ff' : '#1683ff'"
-          :opacity="hoverIndex === i ? 1 : 0.8"
+          :fill="hoverIndex === i ? 'var(--accent-hover)' : 'var(--accent)'"
+          :opacity="hoverIndex === i ? 1 : 0.55"
           rx="1.5"
           @mouseenter="hoverIndex = i"
           @mouseleave="hoverIndex = null"
@@ -77,15 +77,15 @@ const hoverIndex = ref<number | null>(null)
         />
       </g>
 
-      <path v-if="linePath" :d="linePath" fill="none" stroke="#38d99a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+      <path v-if="linePath" :d="linePath" fill="none" stroke="var(--success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
       <circle
         v-for="(v, i) in successData"
         :key="'dot-'+i"
         :cx="PAD.left + i * (plotW / Math.max(successData.length - 1, 1))"
         :cy="PAD.top + plotH * (1 - (v - Math.max(0, Math.floor(Math.min(...successData) - 2))) / (100 - Math.max(0, Math.floor(Math.min(...successData) - 2))))"
         r="3.5"
-        :fill="hoverIndex === i ? '#38d99a' : 'var(--surface)'"
-        stroke="#38d99a"
+        :fill="hoverIndex === i ? 'var(--success)' : 'var(--surface)'"
+        stroke="var(--success)"
         stroke-width="1.5"
         :opacity="hoverIndex === i ? 1 : 0"
         style="transition: opacity 140ms"
@@ -112,7 +112,7 @@ const hoverIndex = ref<number | null>(null)
 <style scoped>
 .chart-wrapper { position: relative; width: 100%; }
 .chart-svg { width: 100%; height: auto; }
-.tick-label { font-size: 10px; fill: var(--muted); }
-.chart-tooltip { position: absolute; top: 0; transform: translateX(-50%); padding: 6px 10px; border-radius: 5px; background: var(--surface-2); border: 1px solid var(--line-strong); font-size: 11px; color: var(--foreground); pointer-events: none; white-space: nowrap; z-index: 5; }
+.tick-label { font-size: 10px; fill: var(--text-3); font-family: var(--font-mono); }
+.chart-tooltip { position: absolute; top: 0; transform: translateX(-50%); padding: 7px 10px; border-radius: var(--radius-sm); background: var(--overlay); border: 1px solid var(--line-2); box-shadow: var(--shadow-md); font-size: var(--text-xs); color: var(--text); pointer-events: none; white-space: nowrap; z-index: 5; }
 .chart-tooltip div + div { margin-top: 2px; }
 </style>

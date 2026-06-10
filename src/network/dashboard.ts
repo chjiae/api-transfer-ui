@@ -26,8 +26,21 @@ export interface ChannelHealthEntry {
 export interface DashboardOverview {
   totalRequests: number
   successRate: number
-  avgLatency: number
+  /** 首字延迟 P50 ms（响应延迟，反映服务速度，不含生成时长） */
+  ttftP50: number
+  /** 首字延迟 P95 ms */
+  ttftP95: number
+  /** 平均生成耗时 ms（整次调用墙钟均值，含模型生成时间） */
+  genAvgLatency: number
   totalCost: number
+  /** 环比（vs 上一等长周期，百分比；null=无上期基准） */
+  requestsChangePct: number | null
+  /** 成功率环比（百分点差） */
+  successRateChangePct: number | null
+  /** 响应延迟环比 */
+  ttftChangePct: number | null
+  /** 消费环比 */
+  costChangePct: number | null
   requestTrend: TrendPoint[]
   modelDistribution: ModelSlice[]
   channelHealth: ChannelHealthEntry[]

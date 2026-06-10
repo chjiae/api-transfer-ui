@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { Loader2, RefreshCw, Search } from 'lucide-vue-next'
+import { PhArrowClockwise as RefreshCw, PhMagnifyingGlass as Search } from '@phosphor-icons/vue'
 import { listLogs, type LogPage } from '@/network/log'
+import UiPageHeader from '@/components/ui/UiPageHeader.vue'
+import UiButton from '@/components/ui/UiButton.vue'
+import UiCard from '@/components/ui/UiCard.vue'
+import UiInput from '@/components/ui/UiInput.vue'
+import UiBadge from '@/components/ui/UiBadge.vue'
+import UiSpinner from '@/components/ui/UiSpinner.vue'
+import UiEmpty from '@/components/ui/UiEmpty.vue'
 
 const page = ref(1)
 const size = ref(20)
@@ -14,117 +21,107 @@ const load = async () => {
   loading.value = true
   error.value = ''
   try {
-    logs.value = await listLogs({
-      page: page.value,
-      size: size.value,
-      model: modelFilter.value || undefined,
-    })
+    logs.value = await listLogs({ page: page.value, size: size.value, model: modelFilter.value || undefined })
   } catch (e) {
     error.value = e instanceof Error ? e.message : '加载失败'
   } finally {
     loading.value = false
   }
 }
-
 onMounted(load)
 
-const totalPages = computed(() => Math.ceil((logs.value?.total ?? 0) / size.value))
+const totalPages = computed(() => Math.max(1, Math.ceil((logs.value?.total ?? 0) / size.value)))
+const typeLabel = (t: number) => ({ 1: 'Chat', 2: 'Embedding' } as Record<number, string>)[t] ?? String(t)
+const fmtTokens = (n: number) => (n >= 1000 ? (n / 1000).toFixed(1) + 'K' : String(n))
+const fmtCost = (n: number) => '$' + (n / 500_000).toFixed(4)
+const fmtTime = (s: string) =>
+  new Date(s).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
-const typeLabel = (t: number) => ({ 1: 'Chat', 2: 'Embedding' }[t] ?? t)
-
-const fmtTokens = (n: number) => n >= 1000 ? (n / 1000).toFixed(1) + 'K' : String(n)
-const fmtCost = (n: number) => (n / 500_000).toFixed(4)
+const onSearch = () => {
+  page.value = 1
+  load()
+}
+const go = (p: number) => {
+  page.value = p
+  load()
+}
 </script>
 
 <template>
-  <div class="page">
-    <div class="page-header">
-      <h1>用量统计</h1>
-      <div class="header-actions">
-        <div class="table-search">
-          <Search :size="14" />
-          <input v-model="modelFilter" type="text" placeholder="按模型筛选..." @keyup.enter="page=1;load()" />
-        </div>
-        <button class="action-btn" @click="load"><RefreshCw :size="15" :class="{ spin: loading }" /> 刷新</button>
-      </div>
-    </div>
+  <div class="page-wrap">
+    <UiPageHeader title="调用明细" description="逐条查看经由网关的模型调用记录，含 Token 用量、耗时与成本">
+      <template #actions>
+        <UiInput v-model="modelFilter" placeholder="按模型筛选" size="sm" style="width: 180px" @keyup.enter="onSearch">
+          <template #prefix><Search :size="14" /></template>
+        </UiInput>
+        <UiButton variant="ghost" size="sm" :loading="loading" @click="load">
+          <RefreshCw :size="15" /> 刷新
+        </UiButton>
+      </template>
+    </UiPageHeader>
 
-    <div v-if="loading && !logs" class="state-box"><Loader2 :size="28" class="spin" /><span>加载中...</span></div>
+    <UiCard v-if="loading && !logs" pad="none">
+      <UiSpinner center label="正在加载调用记录" />
+    </UiCard>
 
-    <template v-else-if="logs">
-      <div class="table-card">
-        <div class="table-wrap">
-          <table>
+    <UiCard v-else-if="error && !logs" pad="lg">
+      <UiEmpty title="无法加载记录" :description="error">
+        <template #action><UiButton variant="primary" @click="load">重新加载</UiButton></template>
+      </UiEmpty>
+    </UiCard>
+
+    <UiCard v-else-if="logs" pad="none">
+      <UiEmpty
+        v-if="!logs.list.length"
+        title="还没有调用记录"
+        description="通过密钥发起第一次模型调用后，明细会实时出现在这里"
+      />
+      <template v-else>
+        <div class="rt-scroll">
+          <table class="rt">
             <thead>
               <tr>
                 <th>时间</th>
                 <th>模型</th>
                 <th>类型</th>
-                <th class="num">输入 Token</th>
-                <th class="num">输出 Token</th>
+                <th class="num">输入</th>
+                <th class="num">输出</th>
                 <th class="num">总量</th>
                 <th class="num">耗时</th>
                 <th class="num">成本</th>
-                <th>Request ID</th>
+                <th>请求 ID</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="row in logs.list" :key="row.id">
-                <td>{{ new Date(row.createdAt).toLocaleString('zh-CN') }}</td>
-                <td><code>{{ row.model }}</code></td>
-                <td>{{ typeLabel(row.type) }}</td>
-                <td class="num">{{ fmtTokens(row.promptTokens) }}</td>
-                <td class="num">{{ fmtTokens(row.completionTokens) }}</td>
-                <td class="num">{{ fmtTokens(row.totalTokens) }}</td>
-                <td class="num">{{ row.latencyMs }}ms</td>
-                <td class="num">${{ fmtCost(row.quotaCost) }}</td>
-                <td><code class="rid">{{ row.requestId?.substring(0, 12) }}...</code></td>
+                <td class="dim mono">{{ fmtTime(row.createdAt) }}</td>
+                <td><span class="code-chip">{{ row.model }}</span></td>
+                <td><UiBadge tone="neutral">{{ typeLabel(row.type) }}</UiBadge></td>
+                <td class="num mono">{{ fmtTokens(row.promptTokens) }}</td>
+                <td class="num mono">{{ fmtTokens(row.completionTokens) }}</td>
+                <td class="num mono strong">{{ fmtTokens(row.totalTokens) }}</td>
+                <td class="num mono">{{ row.latencyMs }}ms</td>
+                <td class="num mono">{{ fmtCost(row.quotaCost) }}</td>
+                <td class="dim mono rid">{{ row.requestId?.substring(0, 12) }}…</td>
               </tr>
             </tbody>
           </table>
         </div>
-        <div class="table-foot">
-          <span class="table-count">共 {{ logs.total }} 条记录</span>
-          <div class="pagination">
-            <button :disabled="page <= 1" @click="page--; load()">上一页</button>
-            <span v-for="p in totalPages" :key="p" class="page-num" :class="{ active: p === page }" @click="page = p; load()">{{ p }}</span>
-            <button :disabled="page >= totalPages" @click="page++; load()">下一页</button>
+        <div class="rt-foot">
+          <span class="rt-count">共 {{ logs.total.toLocaleString() }} 条</span>
+          <div v-if="totalPages > 1" class="pager">
+            <button :disabled="page <= 1" @click="go(page - 1)">上一页</button>
+            <button v-for="p in Math.min(totalPages, 7)" :key="p" :class="{ active: p === page }" @click="go(p)">{{ p }}</button>
+            <button :disabled="page >= totalPages" @click="go(page + 1)">下一页</button>
           </div>
         </div>
-      </div>
-    </template>
+      </template>
+    </UiCard>
   </div>
 </template>
 
 <style scoped>
-.page { padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
-.page-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
-.page-header h1 { margin: 0; font-size: 22px; font-weight: 680; letter-spacing: -0.03em; }
-.header-actions { display: flex; align-items: center; gap: 12px; }
-.action-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 13px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 13px; cursor: pointer; }
-.action-btn:hover { color: var(--foreground); border-color: var(--line-strong); }
-.table-search { display: flex; align-items: center; gap: 7px; height: 33px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface-2); color: var(--muted); }
-.table-search input { background: transparent; border: none; outline: none; color: var(--foreground); font-size: 12px; width: 140px; }
-.table-search input::placeholder { color: var(--muted); }
-.spin { animation: spin 1s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-.state-box { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 64px 24px; color: var(--muted); font-size: 14px; }
-.table-card { border-radius: 9px; border: 1px solid var(--line); background: var(--surface); }
-.table-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th { padding: 11px 16px; text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-th.num { text-align: right; }
-td { padding: 11px 16px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-td.num { text-align: right; }
-code { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: var(--surface-2); color: var(--accent-bright); }
-code.rid { font-size: 10px; color: var(--muted); }
-.table-foot { display: flex; align-items: center; justify-content: space-between; padding: 14px 22px; border-top: 1px solid var(--line); }
-.table-count { font-size: 12px; color: var(--muted); }
-.pagination { display: flex; align-items: center; gap: 4px; }
-.pagination button { padding: 5px 10px; border-radius: 5px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; }
-.pagination button:hover:not(:disabled) { color: var(--foreground); border-color: var(--line-strong); }
-.pagination button:disabled { opacity: 0.3; cursor: default; }
-.page-num { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 5px; font-size: 12px; color: var(--muted); cursor: pointer; }
-.page-num:hover { color: var(--foreground); background: rgba(255,255,255,0.04); }
-.page-num.active { color: #fff; background: var(--accent); }
+.rid {
+  font-size: 11px;
+}
 </style>

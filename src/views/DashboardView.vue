@@ -54,12 +54,17 @@ onMounted(loadData)
 watch(hours, loadData)
 
 // —— 统计卡（真实数据 + 真实环比）——
+const isAdmin = computed(() => data.value?.revenue != null)
 const stats = computed(() => {
   if (!data.value) return []
   const d = data.value
   const ttftTone = d.ttftP50 > 1500 ? 'warning' : 'success'
   const successTone = d.successRate >= 99 ? 'success' : d.successRate >= 95 ? 'warning' : 'danger'
-  return [
+  type Card = {
+    label: string; value: string; hint?: string; tone: 'neutral' | 'success' | 'warning' | 'danger'
+    changePct?: number | null; changeGood?: 'up' | 'down'; changeUnit?: string; sparkData?: number[]
+  }
+  const cards: Card[] = [
     {
       label: '请求总数',
       value: d.totalRequests.toLocaleString(),
@@ -87,7 +92,31 @@ const stats = computed(() => {
       changePct: d.ttftChangePct,
       changeGood: 'down' as const,
     },
-    {
+  ]
+  // 毛利卡仅 ADMIN+ 可见；USER 维持「消费」卡
+  if (isAdmin.value) {
+    cards.push({
+      label: '平台营收',
+      value: '$' + (d.revenue ?? 0).toFixed(2),
+      hint: '用户消费总额',
+      tone: 'neutral' as const,
+      changePct: d.costChangePct,
+      changeGood: 'up' as const,
+      sparkData: d.modelDistribution.map((m) => m.cost),
+    })
+    cards.push({
+      label: '毛利',
+      value: '$' + (d.grossMargin ?? 0).toFixed(2),
+      hint: d.costCoverage != null
+        ? `毛利率 ${(d.marginRate ?? 0).toFixed(1)}% · 成本覆盖率 ${(d.costCoverage ?? 0).toFixed(1)}%`
+        : '',
+      tone: ((d.grossMargin ?? 0) >= 0 ? 'success' : 'danger') as 'success' | 'danger',
+      changePct: d.costCoverage ?? null,
+      changeGood: 'up' as const,
+      changeUnit: '% 覆盖',
+    })
+  } else {
+    cards.push({
       label: '本周期消费',
       value: '$' + d.totalCost.toFixed(2),
       hint: '按上游计费估算',
@@ -95,8 +124,9 @@ const stats = computed(() => {
       changePct: d.costChangePct,
       changeGood: 'up' as const,
       sparkData: d.modelDistribution.map((m) => m.cost),
-    },
-  ]
+    })
+  }
+  return cards
 })
 
 const quotaPct = computed(() => {

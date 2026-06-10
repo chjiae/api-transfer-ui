@@ -48,6 +48,16 @@ export interface DashboardOverview {
   rpmLimit: number
   accountQuota: number
   errorRate: number
+  /** 平台营收 USD（=Σ 售价；仅 ADMIN+ 有值，USER 为 null） */
+  revenue: number | null
+  /** 上游成本 USD（=Σ upstream_cost；仅 ADMIN+ 有值） */
+  upstreamCost: number | null
+  /** 毛利 USD（= revenue - upstreamCost；仅 ADMIN+ 有值） */
+  grossMargin: number | null
+  /** 毛利率 %（仅 ADMIN+ 有值） */
+  marginRate: number | null
+  /** 成本覆盖率 %（仅 ADMIN+ 有值） */
+  costCoverage: number | null
 }
 
 const api = axios.create({ baseURL: '/api' })

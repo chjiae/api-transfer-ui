@@ -15,6 +15,7 @@ import {
   PhGauge as Gauge,
   PhClipboardText as ClipboardText,
   PhList as List,
+  PhTag as Tag,
   PhX as X,
   PhSignOut as SignOut,
   PhCaretUpDown as CaretUpDown,
@@ -59,6 +60,7 @@ const menuGroups: NavGroup[] = [
     items: [
       { path: '/dashboard/channels', icon: Stack, label: '上游通道' },
       { path: '/dashboard/models', icon: ShareNetwork, label: '模型目录' },
+      { path: '/dashboard/channel-costs', icon: Tag, label: '成本价' },
       { path: '/dashboard/routing', icon: ArrowsSplit, label: '路由策略', soon: true },
       { path: '/dashboard/load-balance', icon: Scales, label: '负载均衡', soon: true },
     ],

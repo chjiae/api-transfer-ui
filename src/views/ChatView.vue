@@ -45,16 +45,17 @@ const sendMessage = async () => {
   scrollBottom()
 
   try {
-    const { data } = await api.post<{ code: number; message?: string; data: any }>('/chat/send', {
+    const { data } = await api.post('/chat/completions', {
       model: selectedModel.value,
       messages: messages.value.map((m) => ({ role: m.role, content: m.content })),
+      stream: false,
     })
-    if (data.code !== 0) throw new Error(data.message)
-    const reply = data.data?.choices?.[0]?.message?.content
-      ?? JSON.stringify(data.data)
+    // ChatProxyController 直接透传 OpenAI 格式，无 ApiResponse 包络
+    const reply = data?.choices?.[0]?.message?.content
+      ?? JSON.stringify(data)
     messages.value.push({ role: 'assistant', content: reply })
   } catch (e: any) {
-    error.value = e?.response?.data?.message || e.message || '请求失败'
+    error.value = e?.response?.data?.error?.message || e?.response?.data?.message || e.message || '请求失败'
   } finally {
     sending.value = false
     await nextTick()
